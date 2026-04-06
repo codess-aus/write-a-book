@@ -207,11 +207,23 @@
 
       // Static sections
       var staticSections = [
-        { id: 'about-the-author',   filename: '00-about-the-author.md' },
-        { id: 'book-goal',          filename: '00-book-goal.md' },
-        { id: 'competitive-titles', filename: '00-competitive-titles.md' },
-        { id: 'learning-outcomes',  filename: '00-learning-outcomes.md' },
-        { id: 'book-structure',     filename: '00-book-structure.md' }
+        { id: 'about-the-author',   filename: 'sections/01-about-the-author.md' },
+        { id: 'book-goal',          filename: 'sections/02-book-goal.md' },
+        { id: 'competitive-titles', filename: 'sections/03-competitive-titles.md' },
+        { id: 'learning-outcomes',  filename: 'sections/04-learning-outcomes.md' },
+        { id: 'book-structure',     filename: 'sections/05-book-structure.md' }
+      ];
+
+      var outlineIndex = [
+        '# Book Outline Export',
+        '',
+        '## Sections',
+        '',
+        '- [About the Author](sections/01-about-the-author.md)',
+        '- [Book Goal](sections/02-book-goal.md)',
+        '- [Competitive Titles](sections/03-competitive-titles.md)',
+        '- [Learning Outcomes](sections/04-learning-outcomes.md)',
+        '- [Book Structure](sections/05-book-structure.md)'
       ];
 
       staticSections.forEach(function (s) {
@@ -230,8 +242,9 @@
               var key      = 'chapter_' + chapterNum;
               var chData   = outlinesData[key] || {};
               var slug     = slugify(chTitle);
-              var filename = pad2(chapterNum) + '-' + slug + '.md';
+              var filename = 'chapters/' + pad2(chapterNum) + '-' + slug + '.md';
               zip.file(filename, generateChapterFile(chapterNum, chTitle, chData));
+              outlineIndex.push('- [Chapter ' + chapterNum + ': ' + (safe(chTitle) || '(untitled)') + '](' + filename + ')');
               chapterNum++;
             });
           }
@@ -240,7 +253,13 @@
 
       // Community outreach
       var outreachContent = generateMarkdown('community-outreach', allData['community-outreach']);
-      if (outreachContent) { zip.file('00-community-outreach.md', outreachContent); }
+      if (outreachContent) {
+        zip.file('sections/06-community-outreach.md', outreachContent);
+        outlineIndex.push('- [Community Outreach](sections/06-community-outreach.md)');
+      }
+
+      outlineIndex.push('');
+      zip.file('README.md', outlineIndex.join('\n'));
 
       // Generate and trigger download
       zip.generateAsync({ type: 'blob' }).then(function (blob) {
