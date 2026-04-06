@@ -837,53 +837,68 @@
     desc.textContent = 'Authenticate with GitHub, choose a new or existing book project, then continue the wizard. Each project writes markdown files into its own GitHub repository.';
     card.appendChild(desc);
 
-    var tokenWrap = el('div', { className: 'field-group' });
-    tokenWrap.appendChild(labelEl('GitHub Personal Access Token (classic or fine-grained)', 'github-token'));
-    var tokenHelp = el('p', { className: 'field-help' });
-    tokenHelp.textContent = 'Token must have repository read/write access. It is only stored in memory for this browser tab.';
-    tokenWrap.appendChild(tokenHelp);
-
-    var tokenInput = el('input', {
-      type: 'password',
-      id: 'github-token',
-      placeholder: 'ghp_...'
-    });
-    tokenWrap.appendChild(tokenInput);
-    card.appendChild(tokenWrap);
+    var oauthInfo = el('p', { className: 'field-help' });
+    oauthInfo.textContent = 'You will be redirected to GitHub and returned here after sign-in.';
+    card.appendChild(oauthInfo);
 
     var authMsg = el('p', { className: 'field-error', id: 'auth-error', role: 'alert', 'aria-live': 'polite' });
     card.appendChild(authMsg);
 
     var authActions = el('div', { className: 'nav-buttons' });
     var authBtn = el('button', { type: 'button', className: 'btn btn-primary' });
-    authBtn.textContent = 'Authenticate with GitHub';
+    authBtn.textContent = 'Sign in with GitHub';
     authBtn.addEventListener('click', function () {
-      var token = tokenInput.value ? tokenInput.value.trim() : '';
-      if (!token) {
-        authMsg.textContent = 'Please enter your GitHub token.';
-        return;
-      }
-
-      authBtn.disabled = true;
-      authBtn.textContent = 'Authenticating...';
-      authMsg.textContent = '';
-
-      WizardGitHub.authenticate(token).then(function (user) {
-        githubSession = {
-          token: token,
-          username: user && user.login ? user.login : ''
-        };
-        renderProjectSetup(appEl);
-      }).catch(function (err) {
-        authMsg.textContent = 'GitHub authentication failed: ' + (err && err.message ? err.message : 'unknown error');
-      }).finally(function () {
-        authBtn.disabled = false;
-        authBtn.textContent = 'Authenticate with GitHub';
-      });
+      WizardGitHub.startOAuthRedirect(window.location.href);
     });
     authActions.appendChild(authBtn);
     card.appendChild(authActions);
     appEl.appendChild(card);
+  }
+
+  function consumeOAuthTicket(appEl) {
+    var params = new URLSearchParams(window.location.search);
+    var oauthFlag = params.get('oauth');
+
+    if (!oauthFlag) {
+      WizardGitHub.authenticate().then(function (user) {
+        githubSession = {
+          token: '',
+          username: user && user.login ? user.login : ''
+        };
+        renderProjectSetup(appEl);
+      }).catch(function () {
+        renderOnboarding(appEl);
+      });
+      return;
+    }
+
+    var cleanedUrl = new URL(window.location.href);
+    cleanedUrl.searchParams.delete('oauth');
+    window.history.replaceState({}, '', cleanedUrl.toString());
+
+    appEl.innerHTML = '';
+    var loadingCard = el('div', { className: 'wizard-card wizard-card--onboarding', id: 'main-content' });
+    var loadingTitle = el('h2', {});
+    loadingTitle.textContent = 'Finishing Sign-In';
+    loadingCard.appendChild(loadingTitle);
+    loadingCard.appendChild(el('p', { className: 'section-description' }, ['Completing secure GitHub authentication...']));
+    appEl.appendChild(loadingCard);
+
+    WizardGitHub.completeOAuthSignIn()
+      .then(function (user) {
+        githubSession = {
+          token: '',
+          username: user && user.login ? user.login : ''
+        };
+        renderProjectSetup(appEl);
+      })
+      .catch(function (err) {
+        renderOnboarding(appEl);
+        var authErr = document.getElementById('auth-error');
+        if (authErr) {
+          authErr.textContent = 'GitHub OAuth sign-in failed: ' + (err && err.message ? err.message : 'unknown error');
+        }
+      });
   }
 
   function renderProjectSetup(appEl) {
@@ -1400,7 +1415,7 @@
     }
 
     totalSteps = WIZARD_SECTIONS.length;
-    renderOnboarding(appEl);
+    consumeOAuthTicket(appEl);
     focusFirstInput(appEl);
   }
 

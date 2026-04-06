@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r book-outline-wizard/requirements.txt
 
+      - name: Inject production OAuth server URL
+        if: vars.OAUTH_SERVER_URL != ''
+        run: |
+          sed -i "s|http://localhost:8787|${{ vars.OAUTH_SERVER_URL }}|g" \
+            book-outline-wizard/docs/javascripts/config.js
+
       - name: Build site
         working-directory: book-outline-wizard
         run: mkdocs build --strict

@@ -26,6 +26,7 @@ theme:
 extra_css:
   - stylesheets/custom.css
 extra_javascript:
+  - javascripts/config.js
   - javascripts/questions.js
   - javascripts/storage.js
   - javascripts/export.js

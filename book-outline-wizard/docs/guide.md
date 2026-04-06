@@ -20,13 +20,13 @@ and export all completed sections as a ZIP archive of Markdown files.
 
 When you open the wizard page:
 
-1. Enter a GitHub token with repository write access.
-2. Click **Authenticate with GitHub**.
-3. Choose one of:
+1. Click **Sign in with GitHub**.
+2. Complete GitHub OAuth authorization in the redirect page.
+3. After redirect back, choose one of:
    - **Start a new book** and enter the book name.
    - **Continue an existing book** (if you already created one).
 
-The wizard creates repos in the authenticated user's account using the GitHub API `POST /user/repos`.
+The wizard uses backend OAuth code exchange and then creates repos in the authenticated user's account using the GitHub API `POST /user/repos`.
 If each author logs in with their own account, each repo is created in that author's own GitHub.
 
 ---

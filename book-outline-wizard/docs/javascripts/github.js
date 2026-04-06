@@ -11,6 +11,13 @@
 
   var API_BASE = 'https://api.github.com';
 
+  function getOAuthServerUrl() {
+    if (window.WIZARD_CONFIG && window.WIZARD_CONFIG.oauthServerUrl) {
+      return String(window.WIZARD_CONFIG.oauthServerUrl).replace(/\/$/, '');
+    }
+    return 'http://localhost:8787';
+  }
+
   function request(method, path, token, body, accept404) {
     var headers = {
       'Accept': 'application/vnd.github+json'
@@ -43,6 +50,29 @@
     });
   }
 
+  function oauthRequest(method, path, body) {
+    var oauthBase = getOAuthServerUrl();
+    return window.fetch(oauthBase + path, {
+      method: method,
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var payload = text ? JSON.parse(text) : {};
+        if (!res.ok) {
+          var err = new Error((payload && payload.error) || ('OAuth backend error (' + res.status + ')'));
+          err.status = res.status;
+          throw err;
+        }
+        return payload;
+      });
+    });
+  }
+
   function slugifyRepoName(bookName) {
     var slug = (bookName || '')
       .toLowerCase()
@@ -65,21 +95,55 @@
   }
 
   function authenticate(token) {
-    return request('GET', '/user', token, null, false);
+    if (token) {
+      return request('GET', '/user', token, null, false);
+    }
+    return oauthRequest('GET', '/auth/github/session').then(function (result) {
+      if (!result || !result.authenticated || !result.user) {
+        throw new Error('Not authenticated');
+      }
+      return {
+        login: result.user.login,
+        id: result.user.id
+      };
+    });
+  }
+
+  function startOAuthRedirect(returnTo) {
+    var oauthBase = getOAuthServerUrl();
+    var target = returnTo || window.location.href;
+    var url = oauthBase + '/auth/github/start?return_to=' + encodeURIComponent(target);
+    window.location.assign(url);
+  }
+
+  function completeOAuthSignIn() {
+    return authenticate();
   }
 
   function getRepo(token, owner, repo) {
-    return request('GET', '/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo), token, null, true);
+    if (token) {
+      return request('GET', '/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo), token, null, true);
+    }
+    return oauthRequest('GET', '/api/github/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo));
   }
 
   function createRepo(token, repoName, description, isPrivate) {
-    return request('POST', '/user/repos', token, {
+    if (token) {
+      return request('POST', '/user/repos', token, {
+        name: repoName,
+        description: description || '',
+        homepage: '',
+        private: !!isPrivate,
+        auto_init: true
+      }, false);
+    }
+    return oauthRequest('POST', '/api/github/repos', {
       name: repoName,
       description: description || '',
       homepage: '',
       private: !!isPrivate,
       auto_init: true
-    }, false);
+    });
   }
 
   function getFile(token, owner, repo, filePath) {
@@ -102,6 +166,17 @@
   }
 
   function upsertFiles(token, owner, repo, fileMap, commitMessage) {
+    if (!token) {
+      return oauthRequest('POST', '/api/github/upsert-files', {
+        owner: owner,
+        repo: repo,
+        fileMap: fileMap,
+        commitMessage: commitMessage
+      }).then(function (payload) {
+        return payload.results || [];
+      });
+    }
+
     var paths = Object.keys(fileMap || {});
     var results = [];
 
@@ -126,6 +201,9 @@
   }
 
   window.WizardGitHub = {
+    getOAuthServerUrl: getOAuthServerUrl,
+    startOAuthRedirect: startOAuthRedirect,
+    completeOAuthSignIn: completeOAuthSignIn,
     authenticate: authenticate,
     slugifyRepoName: slugifyRepoName,
     getRepo: getRepo,
