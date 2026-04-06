@@ -1,0 +1,9 @@
+name: write-a-book
+metadata:
+  template: write-a-book@0.0.1
+
+services:
+  oauth-server:
+    project: book-outline-wizard/oauth-server
+    language: js
+    host: appservice
