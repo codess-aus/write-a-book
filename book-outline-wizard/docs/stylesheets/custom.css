@@ -40,6 +40,61 @@ body,
   padding: 1.5rem 1rem 3rem;
 }
 
+.wizard-card--onboarding {
+  max-width: 760px;
+  margin: 1rem auto;
+}
+
+.project-badge {
+  margin: 0 0 0.75rem;
+  display: inline-block;
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 1px solid #a5d6a7;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.project-mode {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem;
+  background: #f8fbfc;
+}
+
+.mode-option input[type="radio"] {
+  margin: 0;
+}
+
+select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #bdbdbd;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fafafa;
+  color: #212121;
+}
+
+select:focus {
+  outline: none;
+  border-color: #00796b;
+  box-shadow: 0 0 0 3px rgba(0, 121, 107, 0.2);
+  background: #ffffff;
+}
+
 /* ---------- Progress bar ---------- */
 .progress-wrap {
   margin-bottom: 1.5rem;
@@ -359,6 +414,33 @@ textarea:focus {
   margin-bottom: 0;
 }
 
+.chapter-images-section {
+  margin-top: 1rem;
+}
+
+.chapter-image-list {
+  margin-top: 0.6rem;
+}
+
+.chapter-image-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border: 1px solid #d7dee2;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.4rem;
+  background: #f8fbfc;
+}
+
+.chapter-image-name {
+  font-size: 0.9rem;
+  color: #263238;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---------- Reviewer tables ---------- */
 .reviewer-table-wrap {
   margin-bottom: 1.5rem;
@@ -487,6 +569,28 @@ textarea:focus {
   color: #90a4ae;
 }
 
+[data-md-color-scheme="slate"] .project-badge {
+  background: #1f3a34;
+  color: #c8e6c9;
+  border-color: #2e7d32;
+}
+
+[data-md-color-scheme="slate"] .mode-option {
+  background: #263238;
+  border-color: #455a64;
+}
+
+[data-md-color-scheme="slate"] select {
+  background: #263238;
+  border-color: #455a64;
+  color: #eceff1;
+}
+
+[data-md-color-scheme="slate"] select:focus {
+  border-color: #4db6ac;
+  box-shadow: 0 0 0 3px rgba(77, 182, 172, 0.25);
+}
+
 [data-md-color-scheme="slate"] input[type="text"],
 [data-md-color-scheme="slate"] input[type="number"],
 [data-md-color-scheme="slate"] input[type="email"],
@@ -511,6 +615,15 @@ textarea:focus {
 [data-md-color-scheme="slate"] input[type="number"]::placeholder,
 [data-md-color-scheme="slate"] textarea::placeholder {
   color: #546e7a;
+}
+
+[data-md-color-scheme="slate"] .chapter-image-row {
+  background: #263238;
+  border-color: #455a64;
+}
+
+[data-md-color-scheme="slate"] .chapter-image-name {
+  color: #eceff1;
 }
 
 [data-md-color-scheme="slate"] .char-counter {

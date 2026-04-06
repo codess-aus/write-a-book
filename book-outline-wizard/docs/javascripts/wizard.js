@@ -2,10 +2,10 @@
  * wizard.js
  * Core wizard: step navigation, rendering, validation, and review/export UI.
  *
- * Depends on: questions.js, storage.js, export.js
+ * Depends on: questions.js, storage.js, export.js, github.js
  */
 
-/* global window, document, WizardStorage, WizardExport, WIZARD_SECTIONS */
+/* global window, document, WizardStorage, WizardExport, WizardGitHub, WIZARD_SECTIONS */
 
 (function () {
   'use strict';
@@ -15,6 +15,9 @@
    * ------------------------------------------------------------------ */
   var currentStep = 0;   // index into WIZARD_SECTIONS
   var totalSteps  = 0;
+  var githubSession = null;
+  var activeProject = null;
+  var pendingImageReads = 0;
 
   /* ------------------------------------------------------------------
    * Utility helpers
@@ -54,6 +57,12 @@
       lbl.appendChild(span);
     }
     return lbl;
+  }
+
+  function sanitizeFileName(name) {
+    return (name || 'image')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-');
   }
 
   /* ------------------------------------------------------------------
@@ -126,6 +135,15 @@
       var pageInp   = block.querySelector('.chapter-page-count');
       var descInp   = block.querySelector('.chapter-description');
       var shRows    = block.querySelectorAll('.subheading-row');
+      var imageStoreInp = block.querySelector('.chapter-images-store');
+      var images = [];
+      if (imageStoreInp && imageStoreInp.value) {
+        try {
+          images = JSON.parse(imageStoreInp.value);
+        } catch (e) {
+          images = [];
+        }
+      }
       var subHeadings = Array.prototype.map.call(shRows, function (row) {
         var heading = row.querySelector('.sh-heading');
         var skill   = row.querySelector('.sh-skill');
@@ -137,7 +155,8 @@
       data[key] = {
         page_count:   pageInp  ? pageInp.value  : '',
         description:  descInp  ? descInp.value  : '',
-        sub_headings: subHeadings
+        sub_headings: subHeadings,
+        images: images
       };
     });
     return data;
@@ -204,25 +223,16 @@
     if (parts.length < field.minParts) {
       errors.push({ fieldId: 'parts', message: 'You need at least ' + field.minParts + ' parts.' });
     }
-    if (parts.length > field.maxParts) {
-      errors.push({ fieldId: 'parts', message: 'You can have at most ' + field.maxParts + ' parts.' });
-    }
     var totalChapters = 0;
     parts.forEach(function (part, i) {
       var chs = (part.chapters || []).filter(function (c) { return c && c.trim(); });
       if (chs.length < field.minChaptersPerPart) {
         errors.push({ fieldId: 'parts', message: 'Part ' + (i + 1) + ' needs at least ' + field.minChaptersPerPart + ' chapters.' });
       }
-      if (chs.length > field.maxChaptersPerPart) {
-        errors.push({ fieldId: 'parts', message: 'Part ' + (i + 1) + ' can have at most ' + field.maxChaptersPerPart + ' chapters.' });
-      }
       totalChapters += chs.length;
     });
     if (totalChapters < field.minTotalChapters) {
       errors.push({ fieldId: 'parts', message: 'You need at least ' + field.minTotalChapters + ' chapters in total.' });
-    }
-    if (totalChapters > field.maxTotalChapters) {
-      errors.push({ fieldId: 'parts', message: 'You can have at most ' + field.maxTotalChapters + ' chapters in total.' });
     }
     return errors;
   }
@@ -437,12 +447,7 @@
       removePartBtn.textContent = '✕';
       removePartBtn.addEventListener('click', function () {
         var allParts = partsWrap.querySelectorAll('.part-block');
-        if (allParts.length > field.minParts) {
           partEl.parentNode.removeChild(partEl);
-          renumberParts();
-        } else {
-          showInlineMsg(wrap, 'You need at least ' + field.minParts + ' parts.');
-        }
       });
       partHeader.appendChild(partTitle);
       partHeader.appendChild(removePartBtn);
@@ -496,11 +501,7 @@
       addChBtn.textContent = '+ Add Chapter';
       addChBtn.addEventListener('click', function () {
         var allChs = chapterListEl.querySelectorAll('.chapter-row');
-        if (allChs.length < field.maxChaptersPerPart) {
-          chapterListEl.appendChild(renderChapterRow(allChs.length, ''));
-        } else {
-          showInlineMsg(partEl, 'Maximum ' + field.maxChaptersPerPart + ' chapters per part.');
-        }
+        chapterListEl.appendChild(renderChapterRow(allChs.length, ''));
       });
       chaptersWrap.appendChild(addChBtn);
       partEl.appendChild(chaptersWrap);
@@ -538,11 +539,7 @@
     addPartBtn.textContent = '+ Add Part';
     addPartBtn.addEventListener('click', function () {
       var allParts = partsWrap.querySelectorAll('.part-block');
-      if (allParts.length < field.maxParts) {
-        partsWrap.appendChild(renderPart(allParts.length, null));
-      } else {
-        showInlineMsg(wrap, 'Maximum ' + field.maxParts + ' parts allowed.');
-      }
+      partsWrap.appendChild(renderPart(allParts.length, null));
     });
     wrap.appendChild(addPartBtn);
 
@@ -664,6 +661,83 @@
         }
       });
       shSection.appendChild(addSHBtn);
+
+      // Chapter images
+      var imageSection = el('div', { className: 'chapter-images-section' });
+      var imageTitle = el('h4', {});
+      imageTitle.textContent = 'Chapter Images';
+      imageSection.appendChild(imageTitle);
+
+      var imageHelp = el('p', { className: 'field-help' });
+      imageHelp.textContent = 'Upload images that belong to this chapter. They will be committed to your GitHub repository.';
+      imageSection.appendChild(imageHelp);
+
+      var imageStore = el('input', { type: 'hidden', className: 'chapter-images-store' });
+      var imageState = Array.isArray(savedCh.images) ? savedCh.images.slice() : [];
+      imageStore.value = JSON.stringify(imageState);
+
+      var imageInput = el('input', {
+        type: 'file',
+        className: 'chapter-image-input',
+        accept: 'image/*',
+        multiple: 'multiple'
+      });
+
+      var imageList = el('div', { className: 'chapter-image-list' });
+
+      function renderImageList() {
+        imageList.innerHTML = '';
+        if (imageState.length === 0) {
+          imageList.appendChild(el('p', { className: 'field-help' }, ['No images uploaded yet.']));
+          return;
+        }
+
+        imageState.forEach(function (img, imgIdx) {
+          var row = el('div', { className: 'chapter-image-row' });
+          var name = el('span', { className: 'chapter-image-name' });
+          name.textContent = img.name || ('image-' + (imgIdx + 1));
+          var remove = el('button', { type: 'button', className: 'btn-icon', 'aria-label': 'Remove image ' + (imgIdx + 1) });
+          remove.textContent = '✕';
+          remove.addEventListener('click', function () {
+            imageState.splice(imgIdx, 1);
+            imageStore.value = JSON.stringify(imageState);
+            renderImageList();
+          });
+          row.appendChild(name);
+          row.appendChild(remove);
+          imageList.appendChild(row);
+        });
+      }
+
+      imageInput.addEventListener('change', function () {
+        var files = Array.prototype.slice.call(imageInput.files || []);
+        files.forEach(function (file) {
+          var reader = new FileReader();
+          pendingImageReads++;
+          reader.onload = function (ev) {
+            var result = ev.target && ev.target.result ? String(ev.target.result) : '';
+            var base64 = result.indexOf(',') > -1 ? result.split(',')[1] : '';
+            imageState.push({
+              name: sanitizeFileName(file.name || 'image.png'),
+              contentBase64: base64
+            });
+            imageStore.value = JSON.stringify(imageState);
+            pendingImageReads--;
+            renderImageList();
+          };
+          reader.onerror = function () {
+            pendingImageReads--;
+          };
+          reader.readAsDataURL(file);
+        });
+        imageInput.value = '';
+      });
+
+      imageSection.appendChild(imageInput);
+      imageSection.appendChild(imageStore);
+      imageSection.appendChild(imageList);
+      renderImageList();
+      block.appendChild(imageSection);
       block.appendChild(shSection);
       wrap.appendChild(block);
     });
@@ -731,6 +805,294 @@
   }
 
   /* ------------------------------------------------------------------
+   * Onboarding + GitHub sync
+   * ------------------------------------------------------------------ */
+
+  function toProjectId(username, repoName) {
+    return (username || '').toLowerCase() + '/' + (repoName || '').toLowerCase();
+  }
+
+  function getResumeStepIndex() {
+    var idx = 0;
+    while (idx < WIZARD_SECTIONS.length) {
+      var section = WIZARD_SECTIONS[idx];
+      var data = WizardStorage.loadProgress(section.id);
+      if (!data) {
+        return idx;
+      }
+      idx++;
+    }
+    return 0;
+  }
+
+  function renderOnboarding(appEl) {
+    appEl.innerHTML = '';
+    var card = el('div', { className: 'wizard-card wizard-card--onboarding', id: 'main-content' });
+
+    var title = el('h2', {});
+    title.textContent = 'Sign in with GitHub to Start';
+    card.appendChild(title);
+
+    var desc = el('p', { className: 'section-description' });
+    desc.textContent = 'Authenticate with GitHub, choose a new or existing book project, then continue the wizard. Each project writes markdown files into its own GitHub repository.';
+    card.appendChild(desc);
+
+    var tokenWrap = el('div', { className: 'field-group' });
+    tokenWrap.appendChild(labelEl('GitHub Personal Access Token (classic or fine-grained)', 'github-token'));
+    var tokenHelp = el('p', { className: 'field-help' });
+    tokenHelp.textContent = 'Token must have repository read/write access. It is only stored in memory for this browser tab.';
+    tokenWrap.appendChild(tokenHelp);
+
+    var tokenInput = el('input', {
+      type: 'password',
+      id: 'github-token',
+      placeholder: 'ghp_...'
+    });
+    tokenWrap.appendChild(tokenInput);
+    card.appendChild(tokenWrap);
+
+    var authMsg = el('p', { className: 'field-error', id: 'auth-error', role: 'alert', 'aria-live': 'polite' });
+    card.appendChild(authMsg);
+
+    var authActions = el('div', { className: 'nav-buttons' });
+    var authBtn = el('button', { type: 'button', className: 'btn btn-primary' });
+    authBtn.textContent = 'Authenticate with GitHub';
+    authBtn.addEventListener('click', function () {
+      var token = tokenInput.value ? tokenInput.value.trim() : '';
+      if (!token) {
+        authMsg.textContent = 'Please enter your GitHub token.';
+        return;
+      }
+
+      authBtn.disabled = true;
+      authBtn.textContent = 'Authenticating...';
+      authMsg.textContent = '';
+
+      WizardGitHub.authenticate(token).then(function (user) {
+        githubSession = {
+          token: token,
+          username: user && user.login ? user.login : ''
+        };
+        renderProjectSetup(appEl);
+      }).catch(function (err) {
+        authMsg.textContent = 'GitHub authentication failed: ' + (err && err.message ? err.message : 'unknown error');
+      }).finally(function () {
+        authBtn.disabled = false;
+        authBtn.textContent = 'Authenticate with GitHub';
+      });
+    });
+    authActions.appendChild(authBtn);
+    card.appendChild(authActions);
+    appEl.appendChild(card);
+  }
+
+  function renderProjectSetup(appEl) {
+    appEl.innerHTML = '';
+    var card = el('div', { className: 'wizard-card wizard-card--onboarding', id: 'main-content' });
+    var projects = WizardStorage.listProjectsForUser(githubSession.username);
+
+    var title = el('h2', {});
+    title.textContent = 'Welcome, ' + githubSession.username;
+    card.appendChild(title);
+
+    var desc = el('p', { className: 'section-description' });
+    desc.textContent = 'Choose whether to start a new book or continue an existing one.';
+    card.appendChild(desc);
+
+    var modeWrap = el('div', { className: 'field-group project-mode' });
+    var newModeId = 'project-mode-new';
+    var continueModeId = 'project-mode-continue';
+
+    var newLabel = el('label', { for: newModeId, className: 'mode-option' });
+    var newRadio = el('input', { type: 'radio', id: newModeId, name: 'project_mode', value: 'new', checked: 'checked' });
+    newLabel.appendChild(newRadio);
+    newLabel.appendChild(document.createTextNode(' Start a new book'));
+
+    var continueLabel = el('label', { for: continueModeId, className: 'mode-option' });
+    var continueRadioAttrs = { type: 'radio', id: continueModeId, name: 'project_mode', value: 'continue' };
+    if (projects.length === 0) {
+      continueRadioAttrs.disabled = 'disabled';
+    }
+    var continueRadio = el('input', continueRadioAttrs);
+    continueLabel.appendChild(continueRadio);
+    continueLabel.appendChild(document.createTextNode(' Continue an existing book'));
+    if (projects.length === 0) {
+      continueLabel.appendChild(el('span', { className: 'field-help' }, [' (no saved books found for this account yet)']));
+    }
+
+    modeWrap.appendChild(newLabel);
+    modeWrap.appendChild(continueLabel);
+    card.appendChild(modeWrap);
+
+    var newBookWrap = el('div', { className: 'field-group', id: 'new-book-wrap' });
+    newBookWrap.appendChild(labelEl('Book Name', 'book-name-input'));
+    var bookInput = el('input', { type: 'text', id: 'book-name-input', placeholder: 'e.g. Practical Cloud Architecture' });
+    newBookWrap.appendChild(bookInput);
+    card.appendChild(newBookWrap);
+
+    var continueWrap = el('div', { className: 'field-group', id: 'continue-project-wrap', style: 'display:none;' });
+    continueWrap.appendChild(labelEl('Select Existing Book', 'existing-project-select'));
+    var select = el('select', { id: 'existing-project-select' });
+    projects.forEach(function (project) {
+      var option = el('option', { value: project.id });
+      option.textContent = project.bookName + ' (' + project.repoOwner + '/' + project.repoName + ')';
+      select.appendChild(option);
+    });
+    continueWrap.appendChild(select);
+    card.appendChild(continueWrap);
+
+    function updateModeVisibility() {
+      var mode = document.querySelector('input[name="project_mode"]:checked');
+      var value = mode ? mode.value : 'new';
+      newBookWrap.style.display = value === 'new' ? '' : 'none';
+      continueWrap.style.display = value === 'continue' ? '' : 'none';
+    }
+
+    newRadio.addEventListener('change', updateModeVisibility);
+    continueRadio.addEventListener('change', updateModeVisibility);
+
+    var err = el('p', { className: 'field-error', id: 'project-error', role: 'alert', 'aria-live': 'polite' });
+    card.appendChild(err);
+
+    var nav = el('div', { className: 'nav-buttons' });
+    var backBtn = el('button', { type: 'button', className: 'btn btn-secondary' });
+    backBtn.textContent = '← Back';
+    backBtn.addEventListener('click', function () {
+      githubSession = null;
+      renderOnboarding(appEl);
+    });
+    nav.appendChild(backBtn);
+
+    var startBtn = el('button', { type: 'button', className: 'btn btn-primary' });
+    startBtn.textContent = 'Continue';
+    startBtn.addEventListener('click', function () {
+      err.textContent = '';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Working...';
+
+      var modeInput = document.querySelector('input[name="project_mode"]:checked');
+      var mode = modeInput ? modeInput.value : 'new';
+
+      if (mode === 'new') {
+        var bookName = (bookInput.value || '').trim();
+        if (!bookName) {
+          err.textContent = 'Please enter a book name.';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Continue';
+          return;
+        }
+
+        createNewProject(bookName).then(function (project) {
+          startWizardForProject(appEl, project, 0);
+        }).catch(function (createErr) {
+          err.textContent = 'Could not create book repository: ' + createErr.message;
+          startBtn.disabled = false;
+          startBtn.textContent = 'Continue';
+        });
+      } else {
+        var selectedProjectId = select.value;
+        var project = WizardStorage.getProject(selectedProjectId);
+        if (!project) {
+          err.textContent = 'Please select a valid project to continue.';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Continue';
+          return;
+        }
+
+        activeProject = project;
+        WizardStorage.setActiveProject(project.id);
+        WizardGitHub.getRepo(githubSession.token, project.repoOwner, project.repoName).then(function (repo) {
+          if (!repo) {
+            throw new Error('Repository not found.');
+          }
+          startWizardForProject(appEl, project, getResumeStepIndex());
+        }).catch(function (loadErr) {
+          err.textContent = 'Could not access existing repository: ' + loadErr.message;
+          startBtn.disabled = false;
+          startBtn.textContent = 'Continue';
+        });
+      }
+    });
+    nav.appendChild(startBtn);
+
+    card.appendChild(nav);
+    appEl.appendChild(card);
+    updateModeVisibility();
+  }
+
+  function createNewProject(bookName) {
+    var repoName = WizardGitHub.slugifyRepoName(bookName);
+    var owner = githubSession.username;
+
+    return WizardGitHub.createRepo(
+      githubSession.token,
+      repoName,
+      'Book project for ' + bookName,
+      true
+    ).catch(function (err) {
+      if (err.status === 422) {
+        var fallbackRepoName = repoName + '-' + Date.now();
+        return WizardGitHub.createRepo(githubSession.token, fallbackRepoName, 'Book project for ' + bookName, true);
+      }
+      throw err;
+    }).then(function (repo) {
+      var project = WizardStorage.saveProjectMeta({
+        id: toProjectId(owner, repo.name),
+        githubUsername: owner,
+        bookName: bookName,
+        repoOwner: owner,
+        repoName: repo.name
+      });
+      WizardStorage.setActiveProject(project.id);
+      activeProject = project;
+
+      var initialFiles = {};
+      initialFiles['README.md'] = '# ' + bookName + '\n\nThis repository was created by the Book Outline Wizard.\n';
+      return WizardGitHub.upsertFiles(
+        githubSession.token,
+        project.repoOwner,
+        project.repoName,
+        initialFiles,
+        'Initialize book repository'
+      ).then(function () {
+        return project;
+      });
+    });
+  }
+
+  function startWizardForProject(appEl, project, stepIndex) {
+    activeProject = project;
+    currentStep = typeof stepIndex === 'number' ? stepIndex : 0;
+    renderStep(currentStep, appEl);
+    focusFirstInput(appEl);
+  }
+
+  function syncProjectToGitHub(statusTargetEl, successMessage) {
+    if (!githubSession || !activeProject) {
+      return Promise.resolve();
+    }
+
+    var allData = WizardStorage.loadAllProgress();
+    var fileMap = WizardExport.buildRepoFileMap(allData, activeProject.bookName);
+
+    return WizardGitHub.upsertFiles(
+      githubSession.token,
+      activeProject.repoOwner,
+      activeProject.repoName,
+      fileMap,
+      'Update outline and chapter markdown files'
+    ).then(function () {
+      if (statusTargetEl) {
+        showStatusMsg(statusTargetEl, successMessage || 'Synced to GitHub repository.', 'success');
+      }
+    }).catch(function (err) {
+      if (statusTargetEl) {
+        showStatusMsg(statusTargetEl, 'Saved locally, but GitHub sync failed: ' + err.message, 'error');
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------
    * Render a single wizard step
    * ------------------------------------------------------------------ */
 
@@ -757,6 +1119,12 @@
 
     // Card
     var card = el('div', { className: 'wizard-card', id: 'main-content' });
+
+    if (activeProject) {
+      var projectBadge = el('p', { className: 'project-badge' });
+      projectBadge.textContent = 'Project: ' + activeProject.bookName + ' (' + activeProject.repoOwner + '/' + activeProject.repoName + ')';
+      card.appendChild(projectBadge);
+    }
 
     if (section.optional) {
       var optBadge = el('span', { className: 'optional-badge' });
@@ -817,13 +1185,18 @@
     saveBtn.textContent = '💾 Save & Continue Later';
     saveBtn.addEventListener('click', function () {
       WizardStorage.saveProgress(section.id, collectSectionData(section));
-      showStatusMsg(appEl, '✅ Progress saved! You can close this tab and return later.', 'success');
+      syncProjectToGitHub(appEl, '✅ Progress saved and synced! You can close this tab and return later.');
     });
     navWrap.appendChild(saveBtn);
 
     var nextBtn = el('button', { type: 'button', className: 'btn btn-primary', id: 'btn-next' });
     nextBtn.textContent = stepIndex < totalSteps - 1 ? 'Next →' : '📋 Review & Export';
     nextBtn.addEventListener('click', function () {
+      if (pendingImageReads > 0) {
+        showInlineMsg(card, 'Please wait for image uploads to finish before continuing.');
+        return;
+      }
+      clearValidationErrors(card);
       var data   = collectSectionData(section);
       var errors = validateSection(section, data);
       if (errors.length > 0) {
@@ -831,13 +1204,16 @@
         return;
       }
       WizardStorage.saveProgress(section.id, data);
-      if (stepIndex < totalSteps - 1) {
-        currentStep++;
-        renderStep(currentStep, appEl);
-        focusFirstInput(appEl);
-      } else {
-        renderReview(appEl);
-      }
+
+      syncProjectToGitHub(appEl).finally(function () {
+        if (stepIndex < totalSteps - 1) {
+          currentStep++;
+          renderStep(currentStep, appEl);
+          focusFirstInput(appEl);
+        } else {
+          renderReview(appEl);
+        }
+      });
     });
     navWrap.appendChild(nextBtn);
 
@@ -858,8 +1234,14 @@
     card.appendChild(titleEl);
 
     var desc = el('p', { className: 'section-description' });
-    desc.textContent = 'Review your outline below. When ready, download a ZIP containing all your Markdown files.';
+    desc.textContent = 'Review your outline below. Sync to GitHub to keep repository markdown up to date, or download a ZIP copy.';
     card.appendChild(desc);
+
+    if (activeProject) {
+      var activeRepo = el('p', { className: 'field-help' });
+      activeRepo.textContent = 'Repository: ' + activeProject.repoOwner + '/' + activeProject.repoName;
+      card.appendChild(activeRepo);
+    }
 
     // Summary
     var allData = WizardStorage.loadAllProgress();
@@ -905,6 +1287,20 @@
     });
     navWrap.appendChild(exportBtn);
 
+    if (activeProject) {
+      var syncBtn = el('button', { type: 'button', className: 'btn btn-secondary' });
+      syncBtn.textContent = '🔁 Sync to GitHub';
+      syncBtn.addEventListener('click', function () {
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Syncing...';
+        syncProjectToGitHub(appEl, 'Outline and chapter markdown files synced to GitHub.').finally(function () {
+          syncBtn.disabled = false;
+          syncBtn.textContent = '🔁 Sync to GitHub';
+        });
+      });
+      navWrap.appendChild(syncBtn);
+    }
+
     var startOverBtn = el('button', { type: 'button', className: 'btn btn-danger' });
     startOverBtn.textContent = '🗑 Start Over';
     startOverBtn.addEventListener('click', function () {
@@ -945,6 +1341,20 @@
     summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function clearValidationErrors(card) {
+    var summary = document.getElementById('error-summary');
+    if (summary) {
+      summary.innerHTML = '';
+      summary.style.display = 'none';
+    }
+    var fieldErrors = card.querySelectorAll('.field-error');
+    fieldErrors.forEach(function (fieldError) {
+      if (fieldError.id && fieldError.id.indexOf('-error') > -1) {
+        fieldError.textContent = '';
+      }
+    });
+  }
+
   function showStatusMsg(appEl, message, type) {
     var existing = appEl.querySelector('.status-msg');
     if (existing) { existing.parentNode.removeChild(existing); }
@@ -981,7 +1391,7 @@
     var appEl = document.getElementById('wizard-app');
     if (!appEl) { return; }
 
-    if (!window.WIZARD_SECTIONS || !window.WizardStorage || !window.WizardExport) {
+    if (!window.WIZARD_SECTIONS || !window.WizardStorage || !window.WizardExport || !window.WizardGitHub) {
       var loadingEl = document.getElementById('wizard-loading');
       if (loadingEl) {
         loadingEl.textContent = 'Error: wizard scripts failed to load. Please refresh the page.';
@@ -990,7 +1400,7 @@
     }
 
     totalSteps = WIZARD_SECTIONS.length;
-    renderStep(currentStep, appEl);
+    renderOnboarding(appEl);
     focusFirstInput(appEl);
   }
 

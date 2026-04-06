@@ -29,6 +29,7 @@ extra_javascript:
   - javascripts/questions.js
   - javascripts/storage.js
   - javascripts/export.js
+  - javascripts/github.js
   - javascripts/wizard.js
 nav:
   - Home: index.md

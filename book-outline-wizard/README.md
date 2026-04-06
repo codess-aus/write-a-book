@@ -13,18 +13,25 @@ Built with MkDocs + Material theme and deployed to GitHub Pages.
 
 ## What It Does
 
+Before the questionnaire starts, the user authenticates with GitHub and chooses whether to
+create a new book project or continue an existing one.
+
+For each new book, the wizard creates a dedicated repository in the authenticated user's own
+GitHub account, then continuously writes section and chapter Markdown files into that repo.
+
 The wizard walks an author through seven key sections:
 
 1. **About the Author** — professional bio with live character counter
 2. **The Book's Goal** — title, subtitle, audience, USP, and learning promise
 3. **Competitive Book Titles** — analysis of up to three competing books
 4. **Learning Outcomes** — up to seven measurable reader outcomes
-5. **Parts & Chapters** — organise the book into 3–4 parts with 2–5 chapters each
-6. **Detailed Chapter Outline** — per-chapter descriptions, page counts, and sub-headings
-7. **Community Outreach** *(optional)* — technical reviewers, Amazon reviewers, and influencers
+5. **Parts & Chapters** — organise the book into as many parts and chapters as needed
+6. **Detailed Chapter Outline** — per-chapter descriptions, page counts, sub-headings, and optional image uploads
+7. **Community Outreach** _(optional)_ — technical reviewers, Amazon reviewers, and influencers
 
-Progress is saved automatically in browser `localStorage`. When finished, the author downloads
-a ZIP archive of Markdown files ready to share with an editor or publisher.
+Progress is saved automatically in browser `localStorage` and synced to the user's GitHub repo.
+When finished, the author can still download a ZIP archive of Markdown files ready to share
+with an editor or publisher.
 
 ---
 
@@ -65,21 +72,19 @@ GitHub Pages URL.
 
 ## Tech Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| [MkDocs](https://www.mkdocs.org/) | 1.6.1 | Static site generator |
-| [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) | 9.7.6 | Theme |
-| [JSZip](https://stuk.github.io/jszip/) | 3.10.1 | Client-side ZIP generation (CDN) |
-| Vanilla JavaScript (ES5) | — | Wizard logic |
-| CSS3 | — | Custom styles |
-| GitHub Actions | — | CI/CD |
-| GitHub Pages | — | Hosting |
+- [MkDocs](https://www.mkdocs.org/) 1.6.1: Static site generator
+- [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) 9.7.6: Theme
+- [JSZip](https://stuk.github.io/jszip/) 3.10.1: Client-side ZIP generation (CDN)
+- Vanilla JavaScript (ES5): Wizard logic
+- CSS3: Custom styles
+- GitHub Actions: CI/CD
+- GitHub Pages: Hosting
 
 ---
 
 ## File Structure
 
-```
+```text
 book-outline-wizard/
 ├── .github/
 │   └── workflows/

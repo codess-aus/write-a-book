@@ -148,18 +148,15 @@
     {
       id: 'book-structure',
       title: 'Section 5: Parts & Chapters',
-      description: 'Organise your book into 3–4 parts, each containing 2–5 chapters. You need between 8 and 17 chapters in total.',
+      description: 'Organise your book into parts and chapters. There is no hard upper limit on parts or chapters.',
       optional: false,
       fields: [
         {
           id: 'parts',
           type: 'parts-chapters',
-          minParts: 3,
-          maxParts: 4,
-          minChaptersPerPart: 2,
-          maxChaptersPerPart: 5,
-          minTotalChapters: 8,
-          maxTotalChapters: 17
+          minParts: 1,
+          minChaptersPerPart: 1,
+          minTotalChapters: 1
         }
       ]
     },
