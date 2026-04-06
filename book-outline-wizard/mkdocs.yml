@@ -1,0 +1,36 @@
+site_name: Book Outline Wizard
+site_description: A guided wizard for technical authors to create book outlines
+site_url: ""
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.action.copy
+extra_css:
+  - stylesheets/custom.css
+extra_javascript:
+  - javascripts/questions.js
+  - javascripts/storage.js
+  - javascripts/export.js
+  - javascripts/wizard.js
+nav:
+  - Home: index.md
+  - Wizard: wizard.md
+  - Guide: guide.md
