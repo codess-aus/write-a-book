@@ -413,7 +413,7 @@ textarea:focus {
 .review-preview {
   font-size: 0.78rem;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: break-word;
   background: #eeeeee;
   border-radius: 4px;
   padding: 0.5rem;
