@@ -165,7 +165,12 @@ app.get('/auth/github/callback', async (req, res) => {
 
     const redirectBack = new URL(returnTo);
     redirectBack.searchParams.set('oauth', '1');
-    return res.redirect(redirectBack.toString());
+    req.session.save((err) => {
+      if (err) {
+        return res.status(500).send('Session save failed.');
+      }
+      return res.redirect(redirectBack.toString());
+    });
   } catch (err) {
     return res.status(500).send('OAuth callback failed.');
   }
