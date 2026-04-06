@@ -174,7 +174,7 @@ app.get('/auth/github/callback', async (req, res) => {
 app.get('/auth/github/session', (req, res) => {
   const gh = req.session.github;
   if (!gh || !gh.accessToken) {
-    return res.status(401).json({ authenticated: false });
+    return res.json({ authenticated: false });
   }
   return res.json({
     authenticated: true,

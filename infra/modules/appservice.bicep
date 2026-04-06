@@ -40,7 +40,7 @@ resource appService 'Microsoft.Web/sites@2022-09-01' = {
       minTlsVersion: '1.2'
       http20Enabled: true
       cors: {
-        allowedOrigins: ['*']
+        allowedOrigins: []
         supportCredentials: false
       }
       appSettings: [
