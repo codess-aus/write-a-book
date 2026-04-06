@@ -13,7 +13,7 @@
   /**
    * Save the data for a single section.
    * @param {string} sectionId
-   * @param {*} data  - any JSON-serialisable value
+   * @param {*} data  - any JSON-serializable value
    */
   function saveProgress(sectionId, data) {
     try {
